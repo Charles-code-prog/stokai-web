@@ -91,13 +91,14 @@ function toObject(table: RowTable, r: Row) {
 
 // ─── Operações ───────────────────────────────────────────────────────────────
 
-export async function loadAll(userId: string) {
+/** scope = dono dos dados (usuário ou empresa); userId = dono das preferências (sempre pessoais) */
+export async function loadAll(scope: string, userId: string) {
   const c = await db();
   const [products, sales, expenses, orders, prefs] = await c.batch(
     [
       ...ROW_TABLES.map(t => ({
         sql: `SELECT id, ${Object.keys(COLUMNS[t]).join(', ')} FROM ${t} WHERE user_id = ? ORDER BY ${ORDER_BY[t]}`,
-        args: [userId],
+        args: [scope],
       })),
       { sql: 'SELECT key, value FROM preferences WHERE user_id = ?', args: [userId] },
     ],
@@ -169,7 +170,7 @@ export async function setPref(userId: string, key: unknown, value: unknown) {
 }
 
 /** Substitui todos os dados do usuário pelo backup, numa transação só. */
-export async function importAll(userId: string, data: BackupData) {
+export async function importAll(scope: string, userId: string, data: BackupData) {
   if (!data || data.app !== 'stokai') throw new BadRequest('arquivo não é um backup do Stokai');
   for (const t of ROW_TABLES) {
     if (!Array.isArray(data[t])) throw new BadRequest(`backup sem a lista "${t}"`);
@@ -177,7 +178,7 @@ export async function importAll(userId: string, data: BackupData) {
   const prefs = data.preferences && typeof data.preferences === 'object' ? data.preferences : {};
 
   const stmts: InStatement[] = [
-    ...ROW_TABLES.map(t => ({ sql: `DELETE FROM ${t} WHERE user_id = ?`, args: [userId] })),
+    ...ROW_TABLES.map(t => ({ sql: `DELETE FROM ${t} WHERE user_id = ?`, args: [scope] })),
     { sql: 'DELETE FROM preferences WHERE user_id = ?', args: [userId] },
   ];
   for (const t of ROW_TABLES) {
@@ -189,7 +190,7 @@ export async function importAll(userId: string, data: BackupData) {
       const id = checkId(row?.id);
       if (seen.has(id)) continue;
       seen.add(id);
-      stmts.push(insertStatement(userId, t, row));
+      stmts.push(insertStatement(scope, t, row));
     }
   }
   for (const [k, v] of Object.entries(prefs)) {

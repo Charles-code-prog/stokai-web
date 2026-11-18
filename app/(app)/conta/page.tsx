@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
-  IoPerson, IoCamera, IoCardOutline, IoPersonOutline, IoColorPaletteOutline, IoChevronForward,
+  IoPerson, IoCamera, IoCardOutline, IoPersonOutline, IoColorPaletteOutline,
   IoDownloadOutline, IoCloudUploadOutline, IoLogOutOutline, IoCameraOutline, IoImagesOutline,
   IoTrashOutline, IoMoon, IoSunny, IoCheckmark, IoKeyOutline,
 } from 'react-icons/io5';
@@ -13,7 +13,8 @@ import { ACCENT_OPTIONS, type ThemeMode } from '@/lib/theme';
 import { downloadBlob, imageFileToSquareDataUrl } from '@/lib/share';
 import { api } from '@/lib/backend';
 import type { BackupData } from '@/lib/types';
-import { ActionSheet, Field, PageHeader, Sheet, useDialog } from '@/components/ui';
+import { ActionSheet, Field, OptionRow, PageHeader, Sheet, useDialog } from '@/components/ui';
+import { NotificationsEntry, NotificationsSheet, OrgSection } from '@/components/workspace';
 
 function isBackup(d: unknown): d is BackupData {
   const b = d as BackupData;
@@ -22,16 +23,6 @@ function isBackup(d: unknown): d is BackupData {
     Array.isArray(b.orders) && !!b.preferences && typeof b.preferences === 'object';
 }
 
-function OptionRow({ icon: Icon, label, onClick, detail }: { icon: IconType; label: string; onClick: () => void; detail?: string }) {
-  return (
-    <button className="option-row" onClick={onClick}>
-      <span className="option-icon"><Icon size={20} /></span>
-      <span className="option-label">{label}</span>
-      {detail ? <span className="option-detail">{detail}</span> : null}
-      <IoChevronForward size={18} className="muted" />
-    </button>
-  );
-}
 
 export default function AccountPage() {
   const data = useData();
@@ -49,6 +40,7 @@ export default function AccountPage() {
   const [infoModal, setInfoModal] = useState(false);
   const [custModal, setCustModal] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [pwModal, setPwModal] = useState(false);
   const [pwCurrent, setPwCurrent] = useState('');
   const [pwNew, setPwNew] = useState('');
@@ -184,7 +176,13 @@ export default function AccountPage() {
         <OptionRow icon={IoPersonOutline} label="Informações pessoais" onClick={openInfoModal} />
         <div className="separator" />
         <OptionRow icon={IoColorPaletteOutline} label="Personalização" onClick={() => setCustModal(true)} />
+        <div className="separator" />
+        <NotificationsEntry onOpen={() => setNotifOpen(true)} />
       </div>
+
+      <OrgSection />
+
+      <div className="section-label">Dados</div>
 
       <div className="section">
         <OptionRow icon={IoDownloadOutline} label="Exportar backup" onClick={exportBackup} />
@@ -192,11 +190,15 @@ export default function AccountPage() {
         <OptionRow icon={IoCloudUploadOutline} label={busy ? 'Importando…' : 'Importar backup'} onClick={() => backupInput.current?.click()} />
       </div>
 
+      <div className="section-label">Acesso</div>
+
       <div className="section">
         <OptionRow icon={IoKeyOutline} label="Alterar senha" onClick={openPwModal} />
         <div className="separator" />
         <OptionRow icon={IoLogOutOutline} label="Sair" detail={user?.email ?? undefined} onClick={handleSignOut} />
       </div>
+
+      <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} />
 
       <div className="version">Stokai Web v1.0.0</div>
 

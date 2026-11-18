@@ -1,6 +1,6 @@
 import 'server-only';
 import { createClient, type Client } from '@libsql/client';
-import { SCHEMA_SQL } from './schema';
+import { ADD_COLUMNS, SCHEMA_SQL } from './schema';
 
 /**
  * Conexão com o Turso. Só roda no servidor: o token do banco nunca vai para o navegador.
@@ -29,7 +29,15 @@ export async function db(): Promise<Client> {
   if (!ready) {
     ready = c
       .batch(splitStatements(SCHEMA_SQL), 'write')
-      .then(() => undefined)
+      .then(async () => {
+        for (const sql of ADD_COLUMNS) {
+          try {
+            await c.execute(sql);
+          } catch (err) {
+            if (!/duplicate column/i.test(String((err as Error)?.message))) throw err;
+          }
+        }
+      })
       .catch(err => {
         ready = null; // tenta de novo na próxima requisição
         throw err;

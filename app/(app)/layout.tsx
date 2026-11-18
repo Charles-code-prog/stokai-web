@@ -9,6 +9,7 @@ import {
 } from 'react-icons/io5';
 import { useAuth } from '@/lib/auth';
 import { useData } from '@/lib/data';
+import { useWorkspace, WorkspaceProvider } from '@/lib/workspace';
 
 const TABS = [
   { href: '/encomendas', label: 'Encomendas', on: IoFileTrayFull, off: IoFileTrayFullOutline },
@@ -19,10 +20,19 @@ const TABS = [
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <WorkspaceProvider>
+      <Shell>{children}</Shell>
+    </WorkspaceProvider>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
   const { ready, user, error: authError } = useAuth();
   const { loaded, syncError, clearError } = useData();
   const router = useRouter();
   const pathname = usePathname();
+  const { notifications } = useWorkspace();
 
   useEffect(() => {
     if (ready && !user && !authError) router.replace('/login');
@@ -64,7 +74,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           const Icon = active ? t.on : t.off;
           return (
             <Link key={t.href} href={t.href} className={`tab ${active ? 'active' : ''}`}>
-              <Icon size={22} />
+              <span className="tab-icon">
+                <Icon size={22} />
+                {t.href === '/conta' && notifications.unread > 0 && (
+                  <span className="tab-badge" aria-label={`${notifications.unread} notificações não lidas`}>
+                    {notifications.unread > 9 ? '9+' : notifications.unread}
+                  </span>
+                )}
+              </span>
               <span>{t.label}</span>
             </Link>
           );

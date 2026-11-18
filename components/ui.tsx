@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { IoCloseCircle } from 'react-icons/io5';
+import { IoChevronForward, IoCloseCircle } from 'react-icons/io5';
 
 // ─── Bottom sheet (equivalente aos Modals "slide" do app) ─────────────────────
 
@@ -77,6 +77,20 @@ export function ActionSheet({
         </button>
       </div>
     </div>
+  );
+}
+
+export function OptionRow({
+  icon: Icon, label, onClick, detail, count,
+}: { icon: IconType; label: string; onClick: () => void; detail?: string; count?: number }) {
+  return (
+    <button className="option-row" onClick={onClick}>
+      <span className="option-icon"><Icon size={20} /></span>
+      <span className="option-label">{label}</span>
+      {detail ? <span className="option-detail">{detail}</span> : null}
+      {count ? <span className="option-count">{count > 99 ? '99+' : count}</span> : null}
+      <IoChevronForward size={18} className="muted" />
+    </button>
   );
 }
 

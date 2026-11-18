@@ -93,4 +93,51 @@ CREATE TABLE IF NOT EXISTS preferences (
   value   TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (user_id, key)
 );
+
+-- ─── Empresas (organizações) ───────────────────────────────────────────────
+-- Os dados (products/sales/expenses/orders) usam user_id como "espaço":
+-- o id do usuário (dados pessoais) ou o id da empresa (dados compartilhados).
+
+CREATE TABLE IF NOT EXISTS organizations (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  name_key     TEXT NOT NULL UNIQUE,         -- nome normalizado (minúsculas, sem espaços extras)
+  keyword_hash TEXT NOT NULL,                -- palavra-chave com hash scrypt
+  owner_id     TEXT NOT NULL,
+  created_at   INTEGER NOT NULL
+);
+
+-- Cada usuário participa de no máximo uma empresa (PK = user_id)
+CREATE TABLE IF NOT EXISTS memberships (
+  user_id    TEXT PRIMARY KEY,
+  org_id     TEXT NOT NULL,
+  role       TEXT NOT NULL CHECK (role IN ('owner', 'member')),
+  status     TEXT NOT NULL CHECK (status IN ('pending', 'approved')),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS memberships_org_idx ON memberships (org_id);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL DEFAULT '',
+  data       TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  read_at    INTEGER
+);
+CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at);
+
+-- Tentativas de entrar em empresa (limita chute de palavra-chave)
+CREATE TABLE IF NOT EXISTS join_attempts (
+  user_id TEXT NOT NULL,
+  at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS join_attempts_idx ON join_attempts (user_id, at);
 `;
+
+/** Colunas adicionadas depois da primeira versão (ALTER falha se já existir — ignorado). */
+export const ADD_COLUMNS = [
+  'ALTER TABLE users ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1',
+];

@@ -6,6 +6,7 @@ import {
   IoCheckmark, IoReceiptOutline, IoClose, IoShareOutline, IoPencilOutline, IoTrashOutline,
 } from 'react-icons/io5';
 import { useData } from '@/lib/data';
+import { useWorkspace } from '@/lib/workspace';
 import {
   MONTHS, PLATFORMS, centsToInput, fullCurrency, labelCurrency, newId, parseCents,
 } from '@/lib/format';
@@ -276,6 +277,8 @@ export default function HomePage() {
   const data = useData();
   const { colors, accent } = data;
   const dialog = useDialog();
+  const { org } = useWorkspace();
+  const orgName = org?.membership?.status === 'approved' ? org.membership.orgName : null;
 
   const now = new Date();
   const todayDay = now.getDate();
@@ -539,7 +542,7 @@ export default function HomePage() {
     <div className={`page ${selectMode ? 'with-selbar' : ''}`}>
       <header className="page-header home-header">
         <div>
-          <div className="header-sub">Faturamento</div>
+          <div className="header-sub">Faturamento{orgName ? <> · <span className="header-org">{orgName}</span></> : null}</div>
           <h1 className="header-title">{monthLabel}</h1>
         </div>
         <div className="header-right">
