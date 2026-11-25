@@ -140,4 +140,9 @@ CREATE INDEX IF NOT EXISTS join_attempts_idx ON join_attempts (user_id, at);
 /** Colunas adicionadas depois da primeira versão (ALTER falha se já existir — ignorado). */
 export const ADD_COLUMNS = [
   'ALTER TABLE users ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1',
+  // Gastos parcelados: cada parcela é uma linha no mês dela
+  "ALTER TABLE expenses ADD COLUMN parcela_grupo TEXT NOT NULL DEFAULT ''",
+  'ALTER TABLE expenses ADD COLUMN parcela_num INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE expenses ADD COLUMN parcelas_total INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE expenses ADD COLUMN valor_total_centavos INTEGER NOT NULL DEFAULT 0',
 ];

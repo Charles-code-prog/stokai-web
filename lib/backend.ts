@@ -17,6 +17,10 @@ export interface Backend {
   insert<T extends RowTable>(table: T, row: RowOf<T>): Promise<void>;
   update<T extends RowTable>(table: T, id: string, patch: Partial<RowOf<T>>): Promise<void>;
   remove(table: RowTable, id: string): Promise<void>;
+  /** Várias linhas numa transação (parcelas) — o servidor avisa a equipe uma vez só */
+  insertMany<T extends RowTable>(table: T, rows: RowOf<T>[]): Promise<void>;
+  /** Apaga removeIds e grava rows numa transação (editar série de parcelas) */
+  replace<T extends RowTable>(table: T, removeIds: string[], rows: RowOf<T>[]): Promise<void>;
   /** Retorna a nova quantidade (texto) ou null se o produto não existe. */
   adjustQty(productId: string, delta: number): Promise<string | null>;
   setPref(key: string, value: string): Promise<void>;
@@ -63,6 +67,8 @@ export function apiBackend(): Backend {
     insert: async (table, row) => { await op({ op: 'insert', table, row }); },
     update: async (table, id, patch) => { await op({ op: 'update', table, id, patch }); },
     remove: async (table, id) => { await op({ op: 'remove', table, id }); },
+    insertMany: async (table, rows) => { await op({ op: 'insertMany', table, rows }); },
+    replace: async (table, removeIds, rows) => { await op({ op: 'replace', table, removeIds, rows }); },
     adjustQty: async (productId, delta) => (await op({ op: 'adjustQty', productId, delta })).quantidade ?? null,
     setPref: async (key, value) => { await op({ op: 'setPref', key, value }); },
     importAll: async data => { await op({ op: 'import', data }); },

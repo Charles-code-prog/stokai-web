@@ -1,7 +1,9 @@
 import { after, type NextRequest } from 'next/server';
 import { isSameOriginJson } from '@/lib/server/auth';
 import { contextFromRequest } from '@/lib/server/context';
-import { adjustQty, importAll, insertRow, isRowTable, loadAll, removeRow, setPref, updateRow } from '@/lib/server/data';
+import {
+  adjustQty, importAll, insertMany, insertRow, isRowTable, loadAll, removeRow, replaceRows, setPref, updateRow,
+} from '@/lib/server/data';
 import { fail, handle, json } from '@/lib/server/http';
 import { notifyActivity } from '@/lib/server/activity';
 
@@ -36,6 +38,23 @@ export async function POST(req: NextRequest) {
         }
         return json({ ok: true });
       }
+      case 'insertMany': {
+        // Série de parcelas: grava tudo junto e avisa uma vez só (pela 1ª parcela)
+        if (!isRowTable(b.table)) return fail('Tabela inválida', 400);
+        await insertMany(ctx.scope, b.table, b.rows);
+        if (b.table !== 'products' && Array.isArray(b.rows) && b.rows[0]) {
+          const table = b.table;
+          const first = b.rows[0];
+          const appUrl = req.nextUrl.origin;
+          after(() => notifyActivity(ctx, table, first, appUrl));
+        }
+        return json({ ok: true });
+      }
+      case 'replace':
+        // Edição de série: apaga as linhas antigas e grava as novas na mesma transação (sem notificar)
+        if (!isRowTable(b.table)) return fail('Tabela inválida', 400);
+        await replaceRows(ctx.scope, b.table, b.removeIds, b.rows ?? []);
+        return json({ ok: true });
       case 'update':
         if (!isRowTable(b.table)) return fail('Tabela inválida', 400);
         await updateRow(ctx.scope, b.table, b.id, b.patch ?? {});

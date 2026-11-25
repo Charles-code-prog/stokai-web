@@ -36,6 +36,11 @@ export interface DBExpense {
   month: number;
   year: number;
   timestamp: number;
+  /** Parcelamento: todas as parcelas de uma compra têm o mesmo grupo ('' = gasto à vista) */
+  parcela_grupo?: string;
+  parcela_num?: number;          // 1..parcelas_total
+  parcelas_total?: number;       // 0 ou 1 = à vista
+  valor_total_centavos?: number; // valor da compra inteira
 }
 
 export interface DBOrder {

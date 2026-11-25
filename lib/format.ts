@@ -62,3 +62,8 @@ export function formatDate(ts: number): string {
 export function newId(): string {
   return String(Date.now());
 }
+
+/** Hora atual em ms (fora do corpo dos componentes, para o lint do React). */
+export function nowMs(): number {
+  return Date.now();
+}

@@ -21,6 +21,7 @@ const COLUMNS = {
   },
   expenses: {
     descricao: 'text', valor_centavos: 'int', day: 'int', month: 'int', year: 'int', timestamp: 'int',
+    parcela_grupo: 'text', parcela_num: 'int', parcelas_total: 'int', valor_total_centavos: 'int',
   },
   orders: {
     descricao: 'text', preco_centavos: 'int', quantidade: 'int', custo_centavos: 'int',
@@ -135,6 +136,26 @@ export async function updateRow(userId: string, table: RowTable, id: unknown, pa
     sql: `UPDATE ${table} SET ${allowed.map(col => `${col} = ?`).join(', ')} WHERE user_id = ? AND id = ?`,
     args: [...allowed.map(col => coerce(kinds[col], patch[col])), userId, checkId(id)],
   });
+}
+
+const MAX_SERIES = 60;
+
+/** Insere várias linhas de uma vez (ex.: todas as parcelas de um gasto), numa transação só. */
+export async function insertMany(scope: string, table: RowTable, rows: unknown) {
+  if (!Array.isArray(rows) || rows.length === 0 || rows.length > MAX_SERIES) throw new BadRequest('lista inválida');
+  const c = await db();
+  await c.batch(rows.map(r => insertStatement(scope, table, (r ?? {}) as Record<string, unknown>)), 'write');
+}
+
+/** Troca linhas por outras numa transação só (ex.: editar um gasto parcelado = refazer a série). */
+export async function replaceRows(scope: string, table: RowTable, removeIds: unknown, rows: unknown) {
+  if (!Array.isArray(removeIds) || removeIds.length > MAX_SERIES) throw new BadRequest('lista inválida');
+  if (!Array.isArray(rows) || rows.length > MAX_SERIES) throw new BadRequest('lista inválida');
+  const c = await db();
+  await c.batch([
+    ...removeIds.map(id => ({ sql: `DELETE FROM ${table} WHERE user_id = ? AND id = ?`, args: [scope, checkId(id)] })),
+    ...rows.map(r => insertStatement(scope, table, (r ?? {}) as Record<string, unknown>)),
+  ], 'write');
 }
 
 export async function removeRow(userId: string, table: RowTable, id: unknown) {

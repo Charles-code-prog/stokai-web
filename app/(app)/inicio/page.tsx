@@ -8,10 +8,11 @@ import {
 import { useData } from '@/lib/data';
 import { useWorkspace } from '@/lib/workspace';
 import {
-  MONTHS, PLATFORMS, centsToInput, fullCurrency, labelCurrency, newId, parseCents,
+  MONTHS, PLATFORMS, centsToInput, fullCurrency, labelCurrency, newId, nowMs, parseCents,
 } from '@/lib/format';
 import { shareNodeAsImage } from '@/lib/share';
 import type { DBExpense, DBProduct, DBSale } from '@/lib/types';
+import { buildSeries, isSeries, MAX_PARCELAS, splitCents } from '@/lib/installments';
 import { ActionSheet, DetailRow, Sheet, useDialog, useLongPress } from '@/components/ui';
 
 type ListEntry =
@@ -177,8 +178,15 @@ function EntryCard({
           <div className="card-name">{sale ? sale.descricao || 'Venda' : exp!.descricao || 'Gasto'}</div>
           <div className="card-date">Dia {entry.item.day}</div>
         </div>
-        <div className={`card-total ${isSale ? '' : 'neg'}`}>
-          {sale ? fullCurrency(sale.total_centavos) : `-${fullCurrency(exp!.valor_centavos)}`}
+        <div className="card-amount">
+          <div className={`card-total ${isSale ? '' : 'neg'}`}>
+            {sale ? fullCurrency(sale.total_centavos) : `-${fullCurrency(exp!.valor_centavos)}`}
+          </div>
+          {exp && isSeries(exp) && (
+            <div className="card-installment">
+              Total {fullCurrency(exp.valor_total_centavos ?? 0)} · Parcela {exp.parcela_num}/{exp.parcelas_total}
+            </div>
+          )}
         </div>
         {!selectMode && (
           <button
@@ -201,8 +209,9 @@ function EntryCard({
           </>
         ) : (
           <>
-            <Col label="Tipo" value="Gasto" neg />
-            <Col label="Valor" value={fullCurrency(exp!.valor_centavos)} neg />
+            <Col label="Tipo" value={isSeries(exp!) ? 'Parcelado' : 'Gasto'} neg />
+            <Col label={isSeries(exp!) ? 'Parcela' : 'Valor'} value={fullCurrency(exp!.valor_centavos)} neg />
+            {isSeries(exp!) && <Col label="Faltam" value={String((exp!.parcelas_total ?? 0) - (exp!.parcela_num ?? 0))} />}
           </>
         )}
       </div>
@@ -238,7 +247,9 @@ function SharePreview({ entries, accent, monthLabel }: { entries: ListEntry[]; a
       {entries.map(entry => {
         const isSale = entry.kind === 'sale';
         const label = isSale ? entry.item.descricao || 'Venda' : entry.item.descricao || 'Gasto';
-        const platLabel = isSale ? PLATFORMS.find(p => p.key === entry.item.plataforma)?.label ?? '' : '';
+        const platLabel = isSale
+          ? PLATFORMS.find(p => p.key === entry.item.plataforma)?.label ?? ''
+          : isSeries(entry.item) ? `Parcela ${entry.item.parcela_num}/${entry.item.parcelas_total}` : '';
         const value = isSale ? fullCurrency(entry.item.total_centavos) : `-${fullCurrency(entry.item.valor_centavos)}`;
         return (
           <div key={`${entry.kind}:${entry.item.id}`} className="sp-row">
@@ -329,6 +340,8 @@ export default function HomePage() {
   // Formulário de gasto
   const [expDesc, setExpDesc] = useState('');
   const [expValue, setExpValue] = useState('');
+  const [expParcelado, setExpParcelado] = useState(false);
+  const [expParcelas, setExpParcelas] = useState('2');
 
   // ── cálculos ──
   const totalSales = sales.reduce((s, d) => s + d.total_centavos, 0);
@@ -343,7 +356,11 @@ export default function HomePage() {
   const canRegister = parsedPrice > 0 && parsedQty > 0;
 
   const parsedExpValue = parseCents(expValue);
-  const canRegisterExp = parsedExpValue > 0;
+  const parsedParcelas = parseInt(expParcelas) || 0;
+  const validParcelas = parsedParcelas >= 2 && parsedParcelas <= MAX_PARCELAS;
+  const canRegisterExp = parsedExpValue > 0 && (!expParcelado || (validParcelas && parsedExpValue >= parsedParcelas));
+  const previewParcelas = expParcelado && validParcelas && parsedExpValue >= parsedParcelas
+    ? splitCents(parsedExpValue, parsedParcelas) : null;
 
   const listData: ListEntry[] = useMemo(() => [
     ...sales.map(item => ({ kind: 'sale' as const, item })),
@@ -460,34 +477,94 @@ export default function HomePage() {
   }
 
   // ── gasto ──
+  function resetExpForm() {
+    setExpDesc(''); setExpValue(''); setExpParcelado(false); setExpParcelas('2');
+  }
   function openCreateExpense() {
-    setExpDesc(''); setExpValue('');
+    resetExpForm();
     setExpModal({ open: true, editing: null });
   }
   function openEditExpense(exp: DBExpense) {
     setExpDesc(exp.descricao);
-    setExpValue(centsToInput(exp.valor_centavos));
+    if (isSeries(exp)) {
+      setExpValue(centsToInput(exp.valor_total_centavos ?? 0));
+      setExpParcelado(true);
+      setExpParcelas(String(exp.parcelas_total));
+    } else {
+      setExpValue(centsToInput(exp.valor_centavos));
+      setExpParcelado(false);
+      setExpParcelas('2');
+    }
     setActionSheet(null);
     setExpModal({ open: true, editing: exp });
   }
   function closeExpModal() {
-    setExpDesc(''); setExpValue('');
+    resetExpForm();
     setExpModal({ open: false, editing: null });
   }
+
+  /** Todas as parcelas da série deste gasto (ou só ele, se for à vista). */
+  function seriesOf(exp: DBExpense): DBExpense[] {
+    if (!isSeries(exp)) return [exp];
+    return data.expenses
+      .filter(e => e.parcela_grupo === exp.parcela_grupo)
+      .sort((a, b) => (a.parcela_num ?? 0) - (b.parcela_num ?? 0));
+  }
+
+  /** Data e horário da 1ª parcela (para refazer a série a partir dela). */
+  function seriesStart(exp: DBExpense) {
+    const first = seriesOf(exp)[0] ?? exp;
+    if ((first.parcela_num ?? 1) <= 1) {
+      return { start: { day: first.day, month: first.month, year: first.year }, ts: first.timestamp };
+    }
+    // 1ª parcela não encontrada: volta os meses a partir desta
+    const idx = first.year * 12 + (first.month - 1) - ((first.parcela_num ?? 1) - 1);
+    return { start: { day: first.day, month: (idx % 12) + 1, year: Math.floor(idx / 12) }, ts: first.timestamp };
+  }
+
   function handleSaveExpense() {
     if (!canRegisterExp) return;
-    if (expModal.editing) {
-      data.updateExpense({ ...expModal.editing, descricao: expDesc.trim() || 'Gasto', valor_centavos: parsedExpValue });
+    const descricao = expDesc.trim() || 'Gasto';
+    const editing = expModal.editing;
+
+    if (!editing) {
+      if (expParcelado) {
+        data.insertExpenseSeries(buildSeries({
+          descricao,
+          totalCents: parsedExpValue,
+          parcelas: parsedParcelas,
+          start: { day: todayDay, month: thisMonth, year: thisYear },
+          firstTimestamp: nowMs(),
+          groupId: newId(),
+        }));
+      } else {
+        data.insertExpense({
+          id: newId(),
+          descricao,
+          valor_centavos: parsedExpValue,
+          day: todayDay,
+          month: thisMonth,
+          year: thisYear,
+          timestamp: nowMs(),
+        });
+      }
+    } else if (!isSeries(editing) && !expParcelado) {
+      data.updateExpense({ ...editing, descricao, valor_centavos: parsedExpValue });
     } else {
-      data.insertExpense({
-        id: newId(),
-        descricao: expDesc.trim() || 'Gasto',
-        valor_centavos: parsedExpValue,
-        day: todayDay,
-        month: thisMonth,
-        year: thisYear,
-        timestamp: Date.now(),
-      });
+      // Envolve parcelas: refaz a série inteira a partir da data da 1ª parcela
+      const old = seriesOf(editing);
+      const { start, ts } = seriesStart(editing);
+      const rows: DBExpense[] = expParcelado
+        ? buildSeries({
+            descricao,
+            totalCents: parsedExpValue,
+            parcelas: parsedParcelas,
+            start,
+            firstTimestamp: ts,
+            groupId: isSeries(editing) ? editing.parcela_grupo! : newId(),
+          })
+        : [{ id: newId(), descricao, valor_centavos: parsedExpValue, ...start, timestamp: ts }];
+      data.replaceExpenses(old.map(e => e.id), rows);
     }
     closeExpModal();
   }
@@ -517,11 +594,18 @@ export default function HomePage() {
   async function handleActionDelete() {
     if (!actionSheet) return;
     const { type, id } = actionSheet;
+    const exp = type === 'expense' ? expenses.find(e => e.id === id) : undefined;
+    const series = exp && isSeries(exp) ? seriesOf(exp) : null;
+    const span = series && series.length > 0
+      ? `de ${MONTHS[series[0].month - 1].slice(0, 3)}/${series[0].year} a ${MONTHS[series[series.length - 1].month - 1].slice(0, 3)}/${series[series.length - 1].year}`
+      : '';
     const ok = await dialog.confirm({
       title: 'Confirmar exclusão',
       message: type === 'sale'
         ? 'Deseja excluir esta venda? Esta ação não pode ser desfeita.'
-        : 'Deseja excluir este gasto? Esta ação não pode ser desfeita.',
+        : series
+          ? `Este gasto foi parcelado em ${exp!.parcelas_total}x. Todas as ${series.length} parcelas (${span}) serão excluídas. Esta ação não pode ser desfeita.`
+          : 'Deseja excluir este gasto? Esta ação não pode ser desfeita.',
       confirmLabel: 'Excluir',
       danger: true,
     });
@@ -530,6 +614,8 @@ export default function HomePage() {
       const sale = sales.find(s => s.id === id);
       if (sale?.product_id) data.adjustProductQuantity(sale.product_id, sale.quantidade);
       data.deleteSale(id);
+    } else if (series) {
+      data.replaceExpenses(series.map(e => e.id), []);
     } else {
       data.deleteExpense(id);
     }
@@ -737,14 +823,62 @@ export default function HomePage() {
           <input className="input" value={expDesc} onChange={e => setExpDesc(e.target.value)} placeholder="Ex: Fornecedor, frete, embalagem…" />
         </label>
         <label className="field">
-          <span className="field-label">Valor (R$) *</span>
+          <span className="field-label">{expParcelado ? 'Valor total (R$) *' : 'Valor (R$) *'}</span>
           <input className="input" value={expValue} onChange={e => setExpValue(e.target.value)} placeholder="0,00" inputMode="decimal" />
         </label>
-        {parsedExpValue > 0 && (
+
+        <button className="check-row" onClick={() => setExpParcelado(v => !v)}>
+          <span className={`checkbox expense ${expParcelado ? 'on' : ''}`}>{expParcelado && <IoCheckmark size={13} />}</span>
+          Parcelado
+        </button>
+
+        {expParcelado && (
+          <div style={{ marginTop: 10 }}>
+            <div className="field-label">Número de parcelas</div>
+            <div className="chips">
+              {[2, 3, 4, 5, 6, 10, 12].map(n => (
+                <button
+                  key={n}
+                  className={`chip expense ${parsedParcelas === n ? 'on' : ''}`}
+                  onClick={() => setExpParcelas(String(n))}
+                >
+                  {n}x
+                </button>
+              ))}
+            </div>
+            <label className="field">
+              <span className="field-label">Ou digite (2 a {MAX_PARCELAS})</span>
+              <input
+                className="input" aria-label="Número de parcelas" value={expParcelas}
+                onChange={e => setExpParcelas(e.target.value.replace(/\D/g, ''))} inputMode="numeric" maxLength={2}
+              />
+            </label>
+            {expModal.editing && isSeries(expModal.editing) && (
+              <div className="series-note">A alteração vale para todas as parcelas deste gasto.</div>
+            )}
+          </div>
+        )}
+
+        {parsedExpValue > 0 && !expParcelado && (
           <div className="preview expense">
             <span className="preview-label">Valor do gasto</span>
             <span className="preview-value neg">-{fullCurrency(parsedExpValue)}</span>
           </div>
+        )}
+        {previewParcelas && (
+          <div className="preview expense series">
+            <div>
+              <div className="preview-label">{parsedParcelas}x de</div>
+              <div className="preview-sub">
+                Total {fullCurrency(parsedExpValue)}
+                {previewParcelas[0] !== previewParcelas[1] ? ` · 1ª parcela ${fullCurrency(previewParcelas[0])}` : ''}
+              </div>
+            </div>
+            <span className="preview-value neg">-{fullCurrency(previewParcelas[previewParcelas.length - 1])}</span>
+          </div>
+        )}
+        {expParcelado && !validParcelas && expParcelas !== '' && (
+          <div className="series-note neg">Escolha de 2 a {MAX_PARCELAS} parcelas.</div>
         )}
       </Sheet>
 
@@ -784,7 +918,21 @@ export default function HomePage() {
           <>
             <DetailRow label="Descrição" value={viewModal.item.descricao || 'Gasto'} />
             <DetailRow label="Data" value={`Dia ${viewModal.item.day} · ${MONTHS[thisMonth - 1]} ${thisYear}`} />
-            <DetailRow label="Valor" value={fullCurrency(viewModal.item.valor_centavos)} color={colors.expense} />
+            <DetailRow
+              label={isSeries(viewModal.item) ? 'Valor da parcela' : 'Valor'}
+              value={fullCurrency(viewModal.item.valor_centavos)} color={colors.expense}
+            />
+            {isSeries(viewModal.item) && (() => {
+              const all = seriesOf(viewModal.item);
+              const last = all[all.length - 1];
+              return (
+                <>
+                  <DetailRow label="Parcela" value={`${viewModal.item.parcela_num} de ${viewModal.item.parcelas_total}`} />
+                  <DetailRow label="Valor total" value={fullCurrency(viewModal.item.valor_total_centavos ?? 0)} />
+                  {last && <DetailRow label="Última parcela" value={`${MONTHS[last.month - 1]} ${last.year}`} />}
+                </>
+              );
+            })()}
           </>
         )}
         <div style={{ height: 16 }} />

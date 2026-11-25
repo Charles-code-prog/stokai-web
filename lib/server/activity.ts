@@ -39,8 +39,19 @@ export async function notifyActivity(ctx: Ctx, table: RowTable, row: Record<stri
     } else if (table === 'expenses') {
       kind = 'expense';
       const desc = str(row.descricao) || 'Gasto';
-      title = `Novo gasto: ${desc} — ${brl(row.valor_centavos)}`;
-      lines = [`${who} registrou um gasto${space}.`, `${desc}: ${brl(row.valor_centavos)}`];
+      const n = Math.trunc(Number(row.parcelas_total) || 0);
+      if (n > 1) {
+        const total = row.valor_total_centavos;
+        title = `Novo gasto parcelado: ${desc} — ${brl(total)} em ${n}x`;
+        lines = [
+          `${who} registrou um gasto parcelado${space}.`,
+          `${desc}: ${brl(total)} em ${n} parcelas (1ª de ${brl(row.valor_centavos)} neste mês).`,
+          'As próximas parcelas entram automaticamente nos meses seguintes.',
+        ];
+      } else {
+        title = `Novo gasto: ${desc} — ${brl(row.valor_centavos)}`;
+        lines = [`${who} registrou um gasto${space}.`, `${desc}: ${brl(row.valor_centavos)}`];
+      }
     } else if (table === 'orders') {
       kind = 'order';
       const desc = str(row.descricao) || 'Encomenda';

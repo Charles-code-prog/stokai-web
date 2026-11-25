@@ -503,3 +503,15 @@ button.rcard { width: calc(100% - 32px); }
 .switch.on::after { transform: translateX(18px); }
 .warn-note { font-size: 12px; color: #F5A623; margin: 10px 0 0; line-height: 1.4; }
 .header-org { color: var(--accent); }
+
+/* ─── Gastos parcelados ─────────────────────────────────────────────────── */
+.card-amount { text-align: right; margin-left: 8px; }
+.card-amount .card-total { margin-left: 0; }
+.card-installment { font-size: 11px; color: var(--text2); margin-top: 3px; white-space: nowrap; }
+.checkbox.expense.on { background: var(--expense); border-color: var(--expense); }
+.chip.expense.on {
+  border-color: var(--expense); background: color-mix(in srgb, var(--expense) 13%, transparent); color: var(--expense);
+}
+.preview.series { align-items: center; }
+.preview-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.series-note { font-size: 12px; color: var(--text2); margin: -4px 0 12px; }

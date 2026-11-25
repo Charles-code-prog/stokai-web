@@ -31,6 +31,10 @@ interface DataCtx {
   insertExpense: (e: DBExpense) => void;
   updateExpense: (e: DBExpense) => void;
   deleteExpense: (id: string) => void;
+  /** Gasto parcelado: grava todas as parcelas (uma por mês) */
+  insertExpenseSeries: (rows: DBExpense[]) => void;
+  /** Troca gastos (ex.: editar/excluir uma série de parcelas) */
+  replaceExpenses: (removeIds: string[], rows: DBExpense[]) => void;
 
   insertOrder: (o: DBOrder) => void;
   updateOrder: (o: DBOrder) => void;
@@ -184,6 +188,17 @@ function UserDataProvider({ children }: { children: React.ReactNode }) {
       deleteExpense(id: string) {
         patch(t => ({ ...t, expenses: t.expenses.filter(x => x.id !== id) }));
         run(b => b.remove('expenses', id));
+      },
+
+      insertExpenseSeries(rows: DBExpense[]) {
+        if (rows.length === 0) return;
+        patch(t => ({ ...t, expenses: [...t.expenses, ...rows].sort(byTimestampDesc) }));
+        run(b => b.insertMany('expenses', rows));
+      },
+      replaceExpenses(removeIds: string[], rows: DBExpense[]) {
+        const gone = new Set(removeIds);
+        patch(t => ({ ...t, expenses: [...t.expenses.filter(x => !gone.has(x.id)), ...rows].sort(byTimestampDesc) }));
+        run(b => b.replace('expenses', removeIds, rows));
       },
 
       insertOrder(o: DBOrder) {
