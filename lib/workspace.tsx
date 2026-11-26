@@ -60,7 +60,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const lastScope = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!user) return;
+    if (!user?.emailVerified) return;
     try {
       const [o, n] = await Promise.all([
         api<OrgInfo>('/api/org'),
@@ -78,7 +78,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [user, reloadData]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.emailVerified) return;
     let alive = true;
     const tick = () => { if (alive && document.visibilityState === 'visible') void refresh(); };
     const onVisible = () => {

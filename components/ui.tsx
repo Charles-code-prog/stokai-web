@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { IoChevronForward, IoCloseCircle } from 'react-icons/io5';
+import { IoChevronForward, IoCloseCircle, IoEyeOffOutline, IoEyeOutline } from 'react-icons/io5';
 
 // ─── Bottom sheet (equivalente aos Modals "slide" do app) ─────────────────────
 
@@ -103,8 +103,50 @@ export function DetailRow({ label, value, color }: { label: string; value: strin
   );
 }
 
+export function PasswordInput({
+  value, onChange, autoComplete = 'off', required, minLength, placeholder, autoFocus,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  required?: boolean;
+  minLength?: number;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className="password-wrap">
+      <input
+        className="input"
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        required={required}
+        minLength={minLength}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+      />
+      <button
+        type="button"
+        className="password-toggle"
+        onClick={e => { e.preventDefault(); setVisible(v => !v); }}
+        aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
+        aria-pressed={visible}
+        title={visible ? 'Ocultar senha' : 'Mostrar senha'}
+      >
+        {visible ? <IoEyeOffOutline size={20} /> : <IoEyeOutline size={20} />}
+      </button>
+    </span>
+  );
+}
+
 export function Field({
-  label, value, onChange, placeholder, inputMode, type = 'text', maxLength, autoFocus,
+  label, value, onChange, placeholder, inputMode, type = 'text', maxLength, autoFocus, autoComplete,
 }: {
   label?: string;
   value: string;
@@ -114,21 +156,26 @@ export function Field({
   type?: string;
   maxLength?: number;
   autoFocus?: boolean;
+  autoComplete?: string;
 }) {
   return (
     <label className="field">
       {label ? <span className="field-label">{label}</span> : null}
-      <input
-        className="input"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        type={type}
-        maxLength={maxLength}
-        autoFocus={autoFocus}
-        autoComplete="off"
-      />
+      {type === 'password' ? (
+        <PasswordInput value={value} onChange={onChange} placeholder={placeholder} autoFocus={autoFocus} autoComplete={autoComplete} />
+      ) : (
+        <input
+          className="input"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          type={type}
+          maxLength={maxLength}
+          autoFocus={autoFocus}
+          autoComplete={autoComplete ?? 'off'}
+        />
+      )}
     </label>
   );
 }

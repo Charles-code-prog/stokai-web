@@ -47,8 +47,33 @@ export function emailConfigured(): boolean {
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
 
+type Mail = { to?: string; bcc?: string[]; subject: string; text: string; html: string };
+
+/** Entrega de fato. Lança erro se o Gmail recusar; não faz nada se o e-mail não estiver configurado. */
+async function deliver(m: Mail): Promise<boolean> {
+  // Desenvolvimento/testes: grava os e-mails num arquivo em vez de enviar
+  if (process.env.MAIL_OUTBOX_FILE) {
+    const to = m.to ? [m.to] : (m.bcc ?? []);
+    await appendFile(process.env.MAIL_OUTBOX_FILE, JSON.stringify({ to, subject: m.subject, text: m.text }) + '\n');
+    return true;
+  }
+  const t = getTransporter();
+  if (!t) return false; // e-mail não configurado: só notificação no app
+  await t.sendMail({
+    from: `"Stokai" <${process.env.GMAIL_USER}>`,
+    to: m.to ?? process.env.GMAIL_USER,
+    bcc: m.bcc,
+    subject: m.subject,
+    text: m.text,
+    html: m.html,
+  });
+  return true;
+}
+
+const BRAND = '<div style="font-size:20px;font-weight:800;color:#00B894;margin-bottom:12px">Stokai</div>';
+
 /**
- * Envia um e-mail (cópia oculta para todos os destinatários).
+ * Avisos de venda/gasto/encomenda (cópia oculta para todos os destinatários).
  * Nunca lança erro: falha de e-mail não pode quebrar o registro de uma venda.
  */
 export async function sendEmail(to: string[], subject: string, lines: string[], appUrl: string) {
@@ -57,30 +82,48 @@ export async function sendEmail(to: string[], subject: string, lines: string[], 
 
   const text = [...lines, '', `Abrir o Stokai: ${appUrl}`, '', 'Para parar de receber, desligue em Conta → Notificações.'].join('\n');
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1A1D2E">
-    <div style="font-size:20px;font-weight:800;color:#00B894;margin-bottom:12px">Stokai</div>
+    ${BRAND}
     ${lines.map(l => `<p style="margin:6px 0">${escapeHtml(l)}</p>`).join('')}
     <p style="margin:18px 0"><a href="${escapeHtml(appUrl)}" style="background:#00D4AA;color:#0F1117;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Abrir o Stokai</a></p>
     <p style="font-size:12px;color:#6B7280">Para parar de receber, desligue em Conta → Notificações.</p>
   </div>`;
 
   try {
-    // Desenvolvimento/testes: grava os e-mails num arquivo em vez de enviar
-    if (process.env.MAIL_OUTBOX_FILE) {
-      await appendFile(process.env.MAIL_OUTBOX_FILE, JSON.stringify({ to: recipients, subject, text }) + '\n');
-      return;
-    }
-    const t = getTransporter();
-    if (!t) return; // e-mail não configurado: só notificação no app
-    await t.sendMail({
-      from: `"Stokai" <${process.env.GMAIL_USER}>`,
-      to: process.env.GMAIL_USER,
-      bcc: recipients,
-      subject,
-      text,
-      html,
-    });
+    await deliver({ bcc: recipients, subject, text, html });
   } catch (err) {
     console.error('[stokai] falha ao enviar e-mail', err);
+  }
+}
+
+/** E-mail com código de 6 dígitos (confirmar cadastro / redefinir senha). Devolve false se não saiu. */
+export async function sendCodeEmail(
+  to: string,
+  purpose: 'verify' | 'reset',
+  code: string,
+  minutes: number,
+): Promise<boolean> {
+  const subject = purpose === 'verify'
+    ? `${code} é o seu código para confirmar o e-mail no Stokai`
+    : `${code} é o seu código para criar uma nova senha no Stokai`;
+  const intro = purpose === 'verify'
+    ? 'Use este código para confirmar seu e-mail no Stokai:'
+    : 'Recebemos um pedido para criar uma nova senha na sua conta do Stokai. Use este código:';
+  const outro = purpose === 'verify'
+    ? 'Se você não criou uma conta no Stokai, ignore este e-mail.'
+    : 'Se não foi você, ignore este e-mail: sua senha continua a mesma.';
+  const text = [intro, '', code, '', `O código vale por ${minutes} minutos.`, outro].join('\n');
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1A1D2E">
+    ${BRAND}
+    <p style="margin:6px 0">${escapeHtml(intro)}</p>
+    <p style="margin:18px 0;font-size:32px;font-weight:800;letter-spacing:8px;font-family:monospace">${escapeHtml(code)}</p>
+    <p style="margin:6px 0">O código vale por ${minutes} minutos.</p>
+    <p style="font-size:12px;color:#6B7280;margin-top:18px">${escapeHtml(outro)}</p>
+  </div>`;
+  try {
+    return await deliver({ to, subject, text, html });
+  } catch (err) {
+    console.error('[stokai] falha ao enviar código por e-mail', err);
+    return false;
   }
 }
 

@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
-  IoPerson, IoCamera, IoCardOutline, IoPersonOutline, IoColorPaletteOutline,
+  IoPerson, IoCamera, IoCardOutline, IoReceiptOutline, IoColorPaletteOutline,
   IoDownloadOutline, IoCloudUploadOutline, IoLogOutOutline, IoCameraOutline, IoImagesOutline,
   IoTrashOutline, IoMoon, IoSunny, IoCheckmark, IoKeyOutline,
 } from 'react-icons/io5';
@@ -173,7 +173,7 @@ export default function AccountPage() {
       </div>
 
       <div className="section">
-        <OptionRow icon={IoPersonOutline} label="Informações pessoais" onClick={openInfoModal} />
+        <OptionRow icon={IoReceiptOutline} label="Informações de nota" onClick={openInfoModal} />
         <div className="separator" />
         <OptionRow icon={IoColorPaletteOutline} label="Personalização" onClick={() => setCustModal(true)} />
         <div className="separator" />
@@ -220,7 +220,7 @@ export default function AccountPage() {
       <Sheet
         open={infoModal}
         onClose={() => setInfoModal(false)}
-        title="Informações pessoais"
+        title="Informações de nota"
         footer={<button className="confirm-btn" onClick={saveInfo}>Salvar</button>}
       >
         <Field label="Seu nome" value={draftName} onChange={setDraftName} placeholder="Ex: Maria Silva" />
@@ -239,9 +239,9 @@ export default function AccountPage() {
           </button>
         }
       >
-        <Field label="Senha atual" type="password" value={pwCurrent} onChange={setPwCurrent} />
-        <Field label="Nova senha (mín. 6 caracteres)" type="password" value={pwNew} onChange={setPwNew} />
-        <Field label="Repita a nova senha" type="password" value={pwConfirm} onChange={setPwConfirm} />
+        <Field label="Senha atual" type="password" autoComplete="current-password" value={pwCurrent} onChange={setPwCurrent} />
+        <Field label="Nova senha (mín. 6 caracteres)" type="password" autoComplete="new-password" value={pwNew} onChange={setPwNew} />
+        <Field label="Repita a nova senha" type="password" autoComplete="new-password" value={pwConfirm} onChange={setPwConfirm} />
         {pwError && <div className="auth-error" role="alert">{pwError}</div>}
       </Sheet>
 

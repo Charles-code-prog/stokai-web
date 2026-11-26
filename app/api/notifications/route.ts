@@ -8,7 +8,7 @@ import { emailConfigured } from '@/lib/server/notify';
 export async function GET(req: NextRequest) {
   return handle(async () => {
     const user = await userFromRequest(req);
-    if (!user) return fail('Sessão expirada. Entre de novo.', 401);
+    if (!user || !user.emailVerified) return fail('Sessão expirada. Entre de novo.', 401);
     const c = await db();
     const [list, unread, pref] = await c.batch([
       {
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   return handle(async () => {
     if (!isSameOriginJson(req)) return fail('Requisição inválida', 403);
     const user = await userFromRequest(req);
-    if (!user) return fail('Sessão expirada. Entre de novo.', 401);
+    if (!user || !user.emailVerified) return fail('Sessão expirada. Entre de novo.', 401);
     const b = await req.json().catch(() => ({}));
     const c = await db();
     if (b.op === 'readAll') {

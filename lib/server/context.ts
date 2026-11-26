@@ -38,7 +38,8 @@ export async function membershipOf(userId: string): Promise<Membership | null> {
 /** Usuário logado + espaço de dados ativo, ou null se não estiver logado. */
 export async function contextFromRequest(req: NextRequest): Promise<Ctx | null> {
   const user = await userFromRequest(req);
-  if (!user) return null;
+  // E-mail ainda não confirmado: nada de dados até confirmar
+  if (!user || !user.emailVerified) return null;
   const membership = await membershipOf(user.id);
   const scope = membership?.status === 'approved' ? membership.orgId : user.id;
   return { user, scope, membership };

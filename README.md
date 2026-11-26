@@ -51,7 +51,15 @@ O backup `.json` tem o mesmo formato da versão web do app Expo: dá para trazer
    | `GMAIL_APP_PASSWORD` | a senha de app de 16 letras |
 4. *Deployments → ⋯ → Redeploy* para valer.
 
-Sem essas variáveis, tudo funciona e só os e-mails deixam de ser enviados. O Gmail permite cerca de 500 e-mails por dia.
+Com o Gmail configurado, o app também passa a:
+
+- **Confirmar o e-mail no cadastro:** quem cria conta recebe um código de 6 dígitos e só vê os dados depois de digitá-lo
+  (contas criadas antes continuam liberadas).
+- **Recuperar a senha:** *Esqueci minha senha* na tela de login envia um código para criar uma senha nova.
+
+Os códigos valem 30 minutos, são de uso único, aceitam 5 tentativas e podem ser reenviados a cada 60 s (máx. 6 por hora).
+
+Sem essas variáveis, tudo funciona e só os e-mails deixam de ser enviados (sem confirmação de cadastro e sem *Esqueci minha senha*). O Gmail permite cerca de 500 e-mails por dia.
 Em desenvolvimento, `MAIL_OUTBOX_FILE=/caminho/arquivo.jsonl` grava os e-mails num arquivo em vez de enviar.
 
 ---
@@ -106,7 +114,8 @@ da nuvem localmente, crie `.env.local` a partir de `.env.example`.
 
 ## Esqueci a senha
 
-Não há envio de e-mail. Para redefinir (com o `.env.local` apontando para o Turso):
+Com o Gmail configurado, use *Esqueci minha senha* na tela de login. Sem e-mail, o dono do banco pode redefinir
+(com o `.env.local` apontando para o Turso):
 
 ```bash
 node --env-file=.env.local scripts/reset-password.mjs email@exemplo.com novaSenha

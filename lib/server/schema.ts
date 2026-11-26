@@ -135,6 +135,25 @@ CREATE TABLE IF NOT EXISTS join_attempts (
   at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS join_attempts_idx ON join_attempts (user_id, at);
+
+-- Códigos de 6 dígitos enviados por e-mail (confirmar cadastro / redefinir senha).
+-- Só o hash fica guardado; um código ativo por usuário e finalidade.
+CREATE TABLE IF NOT EXISTS email_codes (
+  user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  purpose    TEXT NOT NULL,                  -- 'verify' | 'reset'
+  code_hash  TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, purpose)
+);
+
+-- Envios de código (limita quantos e-mails cada conta pode pedir por hora)
+CREATE TABLE IF NOT EXISTS email_sends (
+  user_id TEXT NOT NULL,
+  at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS email_sends_idx ON email_sends (user_id, at);
 `;
 
 /** Colunas adicionadas depois da primeira versão (ALTER falha se já existir — ignorado). */
@@ -145,4 +164,7 @@ export const ADD_COLUMNS = [
   'ALTER TABLE expenses ADD COLUMN parcela_num INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE expenses ADD COLUMN parcelas_total INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE expenses ADD COLUMN valor_total_centavos INTEGER NOT NULL DEFAULT 0',
+  // Confirmação de e-mail: contas antigas já contam como confirmadas (DEFAULT 1);
+  // contas novas entram com 0 quando o envio de e-mail está configurado.
+  'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1',
 ];

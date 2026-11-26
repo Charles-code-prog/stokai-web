@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqua
 import { promisify } from 'node:util';
 import type { NextRequest } from 'next/server';
 import { db } from './db';
+import { emailConfigured } from './notify';
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number, opts: object) => Promise<Buffer>;
 
@@ -10,7 +11,10 @@ export const SESSION_COOKIE = 'stokai_session';
 export const SESSION_DAYS = 60;
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
-export type SessionUser = { id: string; email: string };
+export type SessionUser = { id: string; email: string; emailVerified: boolean };
+
+/** Sem envio de e-mail configurado não há como confirmar: todo mundo conta como confirmado. */
+const verifiedFlag = (v: unknown) => Number(v ?? 1) !== 0 || !emailConfigured();
 
 // ─── Senhas ──────────────────────────────────────────────────────────────────
 
@@ -49,19 +53,33 @@ const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 export async function createUser(email: string, password: string): Promise<SessionUser | null> {
   const c = await db();
   const id = randomUUID();
+  const emailVerified = !emailConfigured();
   const r = await c.execute({
-    sql: 'INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (email) DO NOTHING',
-    args: [id, email, await hashPassword(password), Date.now()],
+    sql: `INSERT INTO users (id, email, password_hash, created_at, email_verified)
+          VALUES (?, ?, ?, ?, ?) ON CONFLICT (email) DO NOTHING`,
+    args: [id, email, await hashPassword(password), Date.now(), emailVerified ? 1 : 0],
   });
-  return r.rowsAffected === 1 ? { id, email } : null;
+  return r.rowsAffected === 1 ? { id, email, emailVerified } : null;
+}
+
+export async function findUserByEmail(email: string): Promise<SessionUser | null> {
+  const c = await db();
+  const r = await c.execute({ sql: 'SELECT id, email, email_verified FROM users WHERE email = ?', args: [email] });
+  const row = r.rows[0];
+  return row ? { id: String(row.id), email: String(row.email), emailVerified: verifiedFlag(row.email_verified) } : null;
+}
+
+export async function markEmailVerified(userId: string) {
+  const c = await db();
+  await c.execute({ sql: 'UPDATE users SET email_verified = 1 WHERE id = ?', args: [userId] });
 }
 
 export async function checkCredentials(email: string, password: string): Promise<SessionUser | null> {
   const c = await db();
-  const r = await c.execute({ sql: 'SELECT id, email, password_hash FROM users WHERE email = ?', args: [email] });
+  const r = await c.execute({ sql: 'SELECT id, email, password_hash, email_verified FROM users WHERE email = ?', args: [email] });
   const row = r.rows[0];
   const ok = await verifyPassword(password, row ? String(row.password_hash) : DUMMY_HASH);
-  return row && ok ? { id: String(row.id), email: String(row.email) } : null;
+  return row && ok ? { id: String(row.id), email: String(row.email), emailVerified: verifiedFlag(row.email_verified) } : null;
 }
 
 export async function setPassword(userId: string, password: string, keepTokenHash?: string) {
@@ -105,12 +123,14 @@ export async function userFromRequest(req: NextRequest): Promise<(SessionUser & 
   const c = await db();
   const tokenHash = sha256(token);
   const r = await c.execute({
-    sql: `SELECT u.id, u.email FROM sessions s JOIN users u ON u.id = s.user_id
+    sql: `SELECT u.id, u.email, u.email_verified FROM sessions s JOIN users u ON u.id = s.user_id
           WHERE s.token_hash = ? AND s.expires_at > ?`,
     args: [tokenHash, Date.now()],
   });
   const row = r.rows[0];
-  return row ? { id: String(row.id), email: String(row.email), tokenHash } : null;
+  return row
+    ? { id: String(row.id), email: String(row.email), emailVerified: verifiedFlag(row.email_verified), tokenHash }
+    : null;
 }
 
 export function sessionCookie(req: NextRequest, token: string, maxAgeSeconds = SESSION_DAYS * 86_400) {

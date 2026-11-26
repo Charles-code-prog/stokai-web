@@ -10,6 +10,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useData } from '@/lib/data';
 import { useWorkspace, WorkspaceProvider } from '@/lib/workspace';
+import { VerifyEmailScreen } from '@/components/verify-email';
 
 const TABS = [
   { href: '/encomendas', label: 'Encomendas', on: IoFileTrayFull, off: IoFileTrayFullOutline },
@@ -49,6 +50,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+
+  if (ready && user && !user.emailVerified) return <VerifyEmailScreen />;
 
   if (!ready || !user || !loaded) {
     return (

@@ -4,34 +4,42 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { useRouter } from 'next/navigation';
 import { api } from './backend';
 
-export type AuthUser = { id: string; email: string };
+export type AuthUser = { id: string; email: string; emailVerified: boolean };
 
 interface AuthCtx {
   /** false até sabermos se há sessão */
   ready: boolean;
   user: AuthUser | null;
   signupAllowed: boolean;
+  /** Envio de e-mail configurado no servidor (recuperar senha / confirmar cadastro) */
+  emailEnabled: boolean;
   /** Erro ao falar com o servidor (ex.: banco não configurado) */
   error: string | null;
   login: (email: string, password: string, signup?: boolean) => Promise<void>;
+  verifyEmail: (code: string) => Promise<void>;
+  resendCode: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string, code: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthCtx | null>(null);
 
-type Me = { user: AuthUser | null; signupAllowed: boolean };
+type Me = { user: AuthUser | null; signupAllowed: boolean; emailEnabled?: boolean };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [signupAllowed, setSignupAllowed] = useState(true);
+  const [emailEnabled, setEmailEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const apply = useCallback((me: Me) => {
-    setUser(prev => (prev?.id === me.user?.id ? prev : me.user));
+    setUser(prev => (prev?.id === me.user?.id && prev?.emailVerified === me.user?.emailVerified ? prev : me.user));
     setSignupAllowed(me.signupAllowed);
+    setEmailEnabled(!!me.emailEnabled);
     setError(null);
   }, []);
 
@@ -59,6 +67,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(r.user);
   }, []);
 
+  const verifyEmail = useCallback(async (code: string) => {
+    const r = await api<{ user: AuthUser }>('/api/auth/verify', { code });
+    setUser(r.user);
+  }, []);
+
+  const resendCode = useCallback(async () => {
+    await api('/api/auth/resend', {});
+  }, []);
+
+  const forgotPassword = useCallback(async (email: string) => {
+    await api('/api/auth/forgot', { email });
+  }, []);
+
+  const resetPassword = useCallback(async (email: string, code: string, password: string) => {
+    const r = await api<{ user: AuthUser }>('/api/auth/reset', { email, code, password });
+    setUser(r.user);
+  }, []);
+
   const signOut = useCallback(async () => {
     try { await api('/api/auth/logout', {}); } catch {}
     setUser(null);
@@ -66,7 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ ready, user, signupAllowed, error, login, signOut, refresh }}>
+    <AuthContext.Provider value={{
+      ready, user, signupAllowed, emailEnabled, error, login, verifyEmail, resendCode, forgotPassword, resetPassword, signOut, refresh,
+    }}>
       {children}
     </AuthContext.Provider>
   );

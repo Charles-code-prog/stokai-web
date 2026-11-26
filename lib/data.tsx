@@ -60,7 +60,8 @@ const byTimestampDesc = <T extends { timestamp: number }>(a: T, b: T) => b.times
 /** Recria o provider (estado zerado) quando o usuário logado muda. */
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  return <UserDataProvider key={user?.id ?? 'anon'}>{children}</UserDataProvider>;
+  const key = user ? `${user.id}:${user.emailVerified ? 'ok' : 'pendente'}` : 'anon';
+  return <UserDataProvider key={key}>{children}</UserDataProvider>;
 }
 
 function UserDataProvider({ children }: { children: React.ReactNode }) {
@@ -71,7 +72,8 @@ function UserDataProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState(0);
 
   const backend = useMemo<Backend | null>(() => {
-    return user ? apiBackend() : null;
+    // Sem e-mail confirmado o servidor não libera os dados
+    return user?.emailVerified ? apiBackend() : null;
   }, [user]);
 
   const reload = useCallback(async () => {
